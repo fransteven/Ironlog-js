@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PhaseBadge } from "@/components/shared/phase-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { Calendar, Trash2, Edit2, Play, CheckCircle } from "lucide-react";
+import { Trash2, Edit2, ChevronRight, CheckCircle } from "lucide-react";
 import { useTransition } from "react";
 import { toggleMesocycleActive } from "@/actions/mesocycles";
 import { toast } from "sonner";
+import { PHASE_COLORS } from "@/lib/constants";
 
 interface MesocycleCardProps {
   mesocycle: {
@@ -29,98 +29,140 @@ interface MesocycleCardProps {
 
 export function MesocycleCard({ mesocycle, onDelete }: MesocycleCardProps) {
   const [isPending, startTransition] = useTransition();
+  const phaseColor = PHASE_COLORS[mesocycle.phase as keyof typeof PHASE_COLORS] || "#6B7280";
 
   function handleToggleActive() {
     startTransition(async () => {
       try {
         await toggleMesocycleActive(mesocycle.id, !mesocycle.isActive);
         toast.success(mesocycle.isActive ? "Mesociclo desactivado" : "Mesociclo activado");
-      } catch (error) {
-        console.error(error);
+      } catch {
         toast.error("Error al cambiar estado activo");
       }
     });
   }
 
   return (
-    <Card className={`relative overflow-hidden transition-all duration-300 hover:shadow-md ${mesocycle.isActive ? 'border-2 border-primary ring-2 ring-primary/10 bg-primary/5' : 'bg-card'}`}>
+    <div
+      className="relative rounded-2xl border overflow-hidden transition-all hover:shadow-lg"
+      style={{
+        background: mesocycle.isActive
+          ? `linear-gradient(145deg, ${phaseColor}0d, ${phaseColor}05)`
+          : undefined,
+        borderColor: mesocycle.isActive ? `${phaseColor}20` : undefined,
+      }}
+    >
       {mesocycle.isActive && (
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-bl">
-          ACTIVO
+        <div
+          className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-white"
+          style={{ background: `${phaseColor}30`, color: phaseColor }}
+        >
+          Activo
         </div>
       )}
 
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-xl font-bold line-clamp-1">{mesocycle.name}</CardTitle>
-            <CardDescription className="flex items-center gap-1.5 mt-1.5 text-xs">
-              <Calendar className="h-3.5 w-3.5" />
-              <span>Iniciado: {mesocycle.startDate ? mesocycle.startDate : "Sin iniciar"}</span>
-            </CardDescription>
+      <div className="p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-start gap-3 pr-12">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: `${phaseColor}15` }}
+          >
+            <div className="w-3 h-3 rounded-sm" style={{ background: phaseColor }} />
           </div>
-          <PhaseBadge phase={mesocycle.phase} />
+          <div className="min-w-0">
+            <h3 className="font-heading text-base font-bold text-foreground truncate">{mesocycle.name}</h3>
+            <div className="mt-1">
+              <PhaseBadge phase={mesocycle.phase} />
+            </div>
+          </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="py-2 space-y-4">
+        {/* Description */}
         {mesocycle.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
-            {mesocycle.description}
-          </p>
+          <p className="text-xs text-muted-foreground line-clamp-2">{mesocycle.description}</p>
         )}
-        <div className="grid grid-cols-3 gap-2 text-center bg-muted/40 p-2.5 rounded border text-xs">
+
+        {/* Progress bar (only active) */}
+        {mesocycle.isActive && (
+          <div className="space-y-1">
+            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  background: `linear-gradient(90deg, ${phaseColor}, ${phaseColor}bb)`,
+                  width: "60%",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="flex gap-4">
           <div>
-            <span className="block font-bold text-sm">{mesocycle.totalWeeks}</span>
-            <span className="text-[10px] text-muted-foreground uppercase">Semanas</span>
+            <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Semanas</p>
+            <p className="text-sm font-bold text-foreground">{mesocycle.totalWeeks}</p>
           </div>
           <div>
-            <span className="block font-bold text-sm">S{mesocycle.deloadWeek}</span>
-            <span className="text-[10px] text-muted-foreground uppercase">Descarga</span>
+            <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Descarga</p>
+            <p className="text-sm font-bold text-foreground">S{mesocycle.deloadWeek}</p>
           </div>
           <div>
-            <span className="block font-bold text-sm">{mesocycle.strengthPct}%</span>
-            <span className="text-[10px] text-muted-foreground uppercase">Intensidad</span>
+            <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Intensidad</p>
+            <p className="text-sm font-bold text-foreground">{mesocycle.strengthPct}%</p>
           </div>
         </div>
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex items-center justify-between border-t border-border pt-4 mt-2">
-        <div className="flex items-center gap-1">
+      {/* Footer */}
+      <div className="border-t border-border px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
           <Button
-            variant={mesocycle.isActive ? "secondary" : "outline"}
+            variant="ghost"
             size="sm"
             onClick={handleToggleActive}
             disabled={isPending}
-            className="text-xs h-8"
+            className="h-7 text-xs px-2.5"
           >
             <CheckCircle className="h-3.5 w-3.5 mr-1" />
-            <span>{mesocycle.isActive ? "Desactivar" : "Activar"}</span>
+            {mesocycle.isActive ? "Desactivar" : "Activar"}
           </Button>
 
-          <Button variant="outline" size="sm" render={<Link href={`/mesociclos/${mesocycle.id}`} />} className="h-8 text-xs">
-            Ver Días ({mesocycle.trainingDaysCount || 0})
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<Link href={`/mesociclos/${mesocycle.id}`} />}
+            className="h-7 text-xs px-2.5 text-primary"
+          >
+            {mesocycle.trainingDaysCount || 0} días
+            <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
           </Button>
         </div>
 
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" render={<Link href={`/mesociclos/${mesocycle.id}/editar`} />} className="h-8 w-8 text-muted-foreground hover:text-foreground">
-            <Edit2 className="h-4 w-4" />
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            render={<Link href={`/mesociclos/${mesocycle.id}/editar`} />}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          >
+            <Edit2 className="h-3.5 w-3.5" />
           </Button>
 
           <ConfirmDialog
             trigger={
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50">
-                <Trash2 className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
             }
-            title={`¿Eliminar mesociclo?`}
-            description={`Esta acción eliminará de forma permanente el mesociclo "${mesocycle.name}" y todos sus días de entrenamiento y programaciones. No se puede deshacer.`}
+            title="¿Eliminar mesociclo?"
+            description={`Eliminará permanentemente "${mesocycle.name}" y todos sus días. No se puede deshacer.`}
             confirmText="Eliminar"
             onConfirm={onDelete}
           />
         </div>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

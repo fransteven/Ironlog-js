@@ -1,131 +1,156 @@
 import { db } from "@/db";
 import { mesocycles, trainingDays } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { startWorkoutSession } from "@/actions/workouts";
-import { Dumbbell, Play, Calendar, Zap } from "lucide-react";
+import { Zap, Calendar, Play, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { PHASE_LABELS } from "@/lib/constants";
 
 export const revalidate = 0;
 
+const dayColors = [
+  { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/10" },
+  { bg: "bg-violet-500/10", text: "text-violet-400", border: "border-violet-500/10" },
+  { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/10" },
+  { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/10" },
+  { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/10" },
+];
+
 export default async function EntrenarPage() {
-  // Consultar mesociclo activo
   const activeMeso = await db.query.mesocycles.findFirst({
     where: eq(mesocycles.isActive, true),
     with: {
       trainingDays: {
         orderBy: [asc(trainingDays.dayNumber)],
-        with: {
-          prescribedExercises: {
-            with: {
-              exercise: true,
-            },
-          },
-        },
+        with: { prescribedExercises: { with: { exercise: true } } },
       },
     },
   });
 
   return (
-    <div className="space-y-8 max-w-4xl">
-      <PageHeader
-        title="Registrar Sesión de Entrenamiento"
-        description="Elige un día programado de tu mesociclo activo para entrenar o inicia una sesión libre independiente."
-      />
+    <div className="max-w-2xl space-y-8">
+      <div>
+        <h1 className="font-heading text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+          Entrenar
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">Elige tu sesión de hoy</p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Opción 1: Sesión Libre */}
-        <Card className="flex flex-col justify-between border-slate-200">
-          <CardHeader>
-            <div className="p-2.5 bg-slate-100 rounded-full text-slate-700 w-fit mb-3">
-              <Zap className="h-6 w-6" />
+      <div className="space-y-4">
+        {/* Sesión libre — amber */}
+        <div className="relative rounded-2xl border border-amber-500/12 bg-amber-500/5 p-5 overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 rounded-bl-full bg-amber-500/5" />
+          <div className="flex items-start gap-4 mb-5">
+            <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center flex-shrink-0">
+              <Zap className="h-5 w-5 text-amber-400" />
             </div>
-            <CardTitle className="text-lg font-bold">Sesión Libre</CardTitle>
-            <CardDescription className="text-xs">
-              Registra un entrenamiento independiente sin estructura de mesociclo. Podrás agregar los ejercicios al vuelo.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="pt-2">
-            <form 
-              action={async () => {
-                "use server";
-                await startWorkoutSession(null);
-              }}
-              className="w-full"
+            <div>
+              <h2 className="font-heading text-lg font-bold text-foreground">Sesión Libre</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sin estructura · Agrega ejercicios al vuelo
+              </p>
+            </div>
+          </div>
+          <form
+            action={async () => {
+              "use server";
+              await startWorkoutSession(null);
+            }}
+          >
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 text-sm font-semibold hover:bg-amber-500/15 transition-colors"
             >
-              <Button type="submit" className="w-full font-bold">
-                <Play className="h-4 w-4 fill-current mr-1.5" />
-                Iniciar Sesión Libre
-              </Button>
-            </form>
-          </CardFooter>
-        </Card>
+              Iniciar Sesión Libre
+            </button>
+          </form>
+        </div>
 
-        {/* Opción 2: Mesociclo Activo (si existe) */}
+        {/* Mesociclo activo — blue */}
         {activeMeso ? (
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
-              <div className="p-2.5 bg-primary/10 rounded-full text-primary w-fit mb-3">
-                <Calendar className="h-6 w-6" />
+          <div className="rounded-2xl border border-blue-500/12 bg-blue-500/5 p-5 space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/15 flex items-center justify-center flex-shrink-0">
+                <Calendar className="h-5 w-5 text-blue-400" />
               </div>
-              <CardTitle className="text-lg font-bold">Mesociclo: {activeMeso.name}</CardTitle>
-              <CardDescription className="text-xs">
-                Fase: {activeMeso.phase} · Selecciona uno de tus días de entrenamiento programados.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-primary/80">Días Disponibles</h4>
-              {activeMeso.trainingDays.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No hay días programados en este mesociclo.</p>
-              ) : (
-                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                  {activeMeso.trainingDays.map((day) => (
+              <div>
+                <h2 className="font-heading text-lg font-bold text-foreground">{activeMeso.name}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {PHASE_LABELS[activeMeso.phase as keyof typeof PHASE_LABELS] ?? activeMeso.phase}
+                </p>
+              </div>
+            </div>
+
+            {activeMeso.trainingDays.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No hay días programados.{" "}
+                <Link href={`/mesociclos/${activeMeso.id}`} className="text-primary underline-offset-2 hover:underline">
+                  Agregar días
+                </Link>
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                  Selecciona tu día
+                </p>
+                {activeMeso.trainingDays.map((day, i) => {
+                  const c = dayColors[i % dayColors.length];
+                  return (
                     <div
                       key={day.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/10 transition-colors text-xs"
+                      className="flex items-center justify-between p-3.5 rounded-xl bg-background/60 border border-border hover:border-primary/20 transition-colors"
                     >
-                      <div>
-                        <strong className="block text-slate-800">{day.name}</strong>
-                        <span className="text-muted-foreground text-[10px]">
-                          {day.prescribedExercises.length} ejercicios prescritos
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center`}>
+                          <span className={`text-xs font-bold ${c.text}`}>{i + 1}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{day.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {day.prescribedExercises.length} ejercicios
+                            {day.prescribedExercises.length > 0 &&
+                              ` · ${day.prescribedExercises.map((pe) => pe.exercise?.name.split(" ")[0]).slice(0, 3).join(", ")}`}
+                          </p>
+                        </div>
                       </div>
-
                       <form
                         action={async () => {
                           "use server";
                           await startWorkoutSession(day.id);
                         }}
                       >
-                        <Button type="submit" size="sm" className="h-8 text-xs font-bold">
-                          Iniciar
-                        </Button>
+                        <button
+                          type="submit"
+                          className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-[0_2px_8px_rgba(59,130,246,0.35)] hover:opacity-90 transition-opacity"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-white text-white" />
+                        </button>
                       </form>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="flex flex-col justify-between border-dashed bg-muted/20">
-            <CardHeader>
-              <div className="p-2.5 bg-muted rounded-full text-muted-foreground w-fit mb-3">
-                <Calendar className="h-6 w-6" />
+                  );
+                })}
               </div>
-              <CardTitle className="text-lg font-bold">Sin Mesociclo Activo</CardTitle>
-              <CardDescription className="text-xs">
-                Para entrenar de forma planificada y comparar tu rendimiento con metas de volumen y RPE, primero debes crear y activar un mesociclo.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter className="pt-2">
-              <Button variant="outline" render={<Link href="/mesociclos/nuevo" />} className="w-full font-bold">
-                Crear Mesociclo
-              </Button>
-            </CardFooter>
-          </Card>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-5 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="font-heading text-lg font-bold text-foreground">Sin Mesociclo Activo</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Crea y activa un mesociclo para entrenar de forma planificada.
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" render={<Link href="/mesociclos/nuevo" className="flex items-center gap-1.5" />} className="w-full">
+              <ChevronRight className="h-4 w-4" />
+              Crear Mesociclo
+            </Button>
+          </div>
         )}
       </div>
     </div>
