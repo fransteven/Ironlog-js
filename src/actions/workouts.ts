@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "@/db";
-import { workoutSessions, exerciseLogs, setLogs, personalRecords, exercises, trainingDays } from "@/db/schema";
+import { workoutSessions, exerciseLogs, setLogs, personalRecords, exercises, trainingDays, prescribedExercises } from "@/db/schema";
 import { setLogSchema, finishSessionSchema, workoutSessionSchema } from "@/lib/validators";
 import { estimateE1RM } from "@/lib/calculations";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, asc, sql } from "drizzle-orm";
 
 export async function startWorkoutSession(trainingDayId?: number | null) {
   let title = "Sesión Libre";
@@ -37,13 +37,10 @@ export async function startWorkoutSession(trainingDayId?: number | null) {
 
     // Si está vinculada a un día prescrito, pre-crear los exerciseLogs para conveniencia
     if (trainingDayId) {
-      const prescribed = await db.query.prescribedExercises.findMany({
-        where: eq(workoutSessions.trainingDayId, trainingDayId),
-        orderBy: [desc(workoutSessions.createdAt)], // o por el campo order
+      const orderedPrescribed = await db.query.prescribedExercises.findMany({
+        where: eq(prescribedExercises.trainingDayId, trainingDayId),
+        orderBy: [asc(prescribedExercises.order)],
       });
-
-      // Para ordenar los prescritos
-      const orderedPrescribed = prescribed.sort((a, b) => a.order - b.order);
 
       for (let i = 0; i < orderedPrescribed.length; i++) {
         await db.insert(exerciseLogs).values({

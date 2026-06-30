@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Calendar, Play, Clock, MoreHorizontal, Dumbbell, Award, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -58,14 +59,17 @@ export function Navbar() {
           })}
         </nav>
 
-        {/* Desktop CTA */}
-        <Link
-          href="/entrenar"
-          className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity shadow-[0_2px_12px_rgba(59,130,246,0.35)]"
-        >
-          <Play className="h-4 w-4 fill-current" />
-          <span>Entrenar</span>
-        </Link>
+        {/* Desktop CTA + Theme toggle */}
+        <div className="hidden md:flex items-center gap-2">
+          <ThemeToggle />
+          <Link
+            href="/entrenar"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity shadow-[0_2px_12px_rgba(59,130,246,0.35)]"
+          >
+            <Play className="h-4 w-4 fill-current" />
+            <span>Entrenar</span>
+          </Link>
+        </div>
       </div>
 
       {/* Mobile bottom nav */}
