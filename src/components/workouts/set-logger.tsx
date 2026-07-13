@@ -22,11 +22,19 @@ interface SetLoggerProps {
   lastSetsData?: Record<number, { weightKg: number; repsCompleted: number; rpe: number | null }>;
   action: (sessionId: number, formData: FormData) => Promise<{ success?: boolean; isPR?: boolean; errors?: Record<string, string[]> }>;
   onSetAdded?: () => void;
+  onPendingChange?: (pending: boolean) => void;
 }
 
-export function SetLogger({ sessionId, exercises, lastSetsData = {}, action, onSetAdded }: SetLoggerProps) {
+export function SetLogger({ sessionId, exercises, lastSetsData = {}, action, onSetAdded, onPendingChange }: SetLoggerProps) {
   const [isPending, startTransition] = useTransition();
   const [selectedExId, setSelectedExId] = useState<number | null>(null);
+
+  // Notificar al padre cuando hay un addSet en vuelo, para poder bloquear
+  // navegaciones (p.ej. "Finalizar Sesión") que abortarían este fetch y
+  // perderían la serie.
+  useEffect(() => {
+    onPendingChange?.(isPending);
+  }, [isPending, onPendingChange]);
 
   // Ordenar ejercicios
   const sortedExercises = [...exercises].sort((a, b) => a.name.localeCompare(b.name));

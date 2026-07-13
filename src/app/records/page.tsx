@@ -1,17 +1,21 @@
 import { db } from "@/db";
 import { personalRecords, exercises } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/layout/page-header";
 import { PRCard } from "@/components/pr/pr-card";
 import { PRFormDialog } from "@/components/pr/pr-form-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Award } from "lucide-react";
+import { requireUser } from "@/lib/auth-helpers";
 
 export const revalidate = 0;
 
 export default async function RecordsPage() {
-  // 1. Consultar todos los récords personales
+  const user = await requireUser();
+
+  // 1. Consultar récords personales (ADMIN ve todos; USER solo los propios)
   const prsList = await db.query.personalRecords.findMany({
+    where: user.role === "ADMIN" ? undefined : eq(personalRecords.userId, user.id),
     orderBy: [desc(personalRecords.date), desc(personalRecords.createdAt)],
     with: {
       exercise: true,

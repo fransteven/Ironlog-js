@@ -3,13 +3,21 @@
 import { db } from "@/db";
 import { mesocycles, trainingDays, prescribedExercises } from "@/db/schema";
 import { mesocycleSchema, trainingDaySchema, prescribedExerciseSchema } from "@/lib/validators";
+import { requireUser, assertOwnership } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq, not, and } from "drizzle-orm";
+import { eq, not, and, isNull } from "drizzle-orm";
+
+/** eq()/isNull() según si el dueño del recurso es un usuario real o legado (null). */
+function ownerScope(userId: number | null) {
+  return userId === null ? isNull(mesocycles.userId) : eq(mesocycles.userId, userId);
+}
 
 // --- Mesocycle Actions ---
 
 export async function createMesocycle(formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     name: formData.get("name"),
     phase: formData.get("phase"),
@@ -28,12 +36,12 @@ export async function createMesocycle(formData: FormData) {
   }
 
   try {
-    // Si este mesociclo se marca como activo, desactivar todos los demás
+    // Si este mesociclo se marca como activo, desactivar los demás de este usuario
     if (parsed.data.isActive) {
-      await db.update(mesocycles).set({ isActive: false });
+      await db.update(mesocycles).set({ isActive: false }).where(eq(mesocycles.userId, user.id));
     }
 
-    await db.insert(mesocycles).values(parsed.data);
+    await db.insert(mesocycles).values({ ...parsed.data, userId: user.id });
   } catch (error) {
     console.error("Error creating mesocycle:", error);
     return { errors: { name: ["Error al crear el mesociclo."] } };
@@ -44,6 +52,8 @@ export async function createMesocycle(formData: FormData) {
 }
 
 export async function updateMesocycle(id: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     name: formData.get("name"),
     phase: formData.get("phase"),
@@ -62,9 +72,14 @@ export async function updateMesocycle(id: number, formData: FormData) {
   }
 
   try {
-    // Si se activa, desactivar los demás
+    const [existing] = await db.select().from(mesocycles).where(eq(mesocycles.id, id));
+    if (!existing) return { errors: { name: ["Mesociclo no encontrado."] } };
+    assertOwnership(existing.userId, user);
+
+    // Si se activa, desactivar los demás del mismo usuario
     if (parsed.data.isActive) {
-      await db.update(mesocycles).set({ isActive: false }).where(not(eq(mesocycles.id, id)));
+      await db.update(mesocycles).set({ isActive: false })
+        .where(and(not(eq(mesocycles.id, id)), ownerScope(existing.userId)));
     }
 
     await db.update(mesocycles).set(parsed.data).where(eq(mesocycles.id, id));
@@ -79,10 +94,16 @@ export async function updateMesocycle(id: number, formData: FormData) {
 }
 
 export async function toggleMesocycleActive(id: number, isActive: boolean) {
+  const user = await requireUser();
+
   try {
+    const [existing] = await db.select().from(mesocycles).where(eq(mesocycles.id, id));
+    if (!existing) return { error: "Mesociclo no encontrado." };
+    assertOwnership(existing.userId, user);
+
     if (isActive) {
-      // Desactivar todos los demás primero
-      await db.update(mesocycles).set({ isActive: false });
+      // Desactivar los demás del mismo usuario primero
+      await db.update(mesocycles).set({ isActive: false }).where(ownerScope(existing.userId));
     }
     await db.update(mesocycles).set({ isActive }).where(eq(mesocycles.id, id));
   } catch (error) {
@@ -96,7 +117,13 @@ export async function toggleMesocycleActive(id: number, isActive: boolean) {
 }
 
 export async function deleteMesocycle(id: number) {
+  const user = await requireUser();
+
   try {
+    const [existing] = await db.select().from(mesocycles).where(eq(mesocycles.id, id));
+    if (!existing) return { error: "Mesociclo no encontrado." };
+    assertOwnership(existing.userId, user);
+
     await db.delete(mesocycles).where(eq(mesocycles.id, id));
   } catch (error) {
     console.error("Error deleting mesocycle:", error);
@@ -108,8 +135,18 @@ export async function deleteMesocycle(id: number) {
 }
 
 // --- TrainingDay Actions ---
+// trainingDays/prescribedExercises no llevan userId propio: heredan
+// propiedad de su mesocycle padre.
+
+async function assertMesocycleOwner(mesocycleId: number, user: Awaited<ReturnType<typeof requireUser>>) {
+  const [meso] = await db.select().from(mesocycles).where(eq(mesocycles.id, mesocycleId));
+  if (!meso) throw new Error("Mesociclo no encontrado.");
+  assertOwnership(meso.userId, user);
+}
 
 export async function createTrainingDay(mesocycleId: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     name: formData.get("name"),
     dayNumber: formData.get("dayNumber"),
@@ -122,6 +159,7 @@ export async function createTrainingDay(mesocycleId: number, formData: FormData)
   }
 
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.insert(trainingDays).values({
       mesocycleId,
       ...parsed.data,
@@ -136,6 +174,8 @@ export async function createTrainingDay(mesocycleId: number, formData: FormData)
 }
 
 export async function updateTrainingDay(id: number, mesocycleId: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     name: formData.get("name"),
     dayNumber: formData.get("dayNumber"),
@@ -148,6 +188,7 @@ export async function updateTrainingDay(id: number, mesocycleId: number, formDat
   }
 
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.update(trainingDays).set(parsed.data).where(eq(trainingDays.id, id));
   } catch (error) {
     console.error("Error updating training day:", error);
@@ -159,7 +200,10 @@ export async function updateTrainingDay(id: number, mesocycleId: number, formDat
 }
 
 export async function deleteTrainingDay(id: number, mesocycleId: number) {
+  const user = await requireUser();
+
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.delete(trainingDays).where(eq(trainingDays.id, id));
   } catch (error) {
     console.error("Error deleting training day:", error);
@@ -173,6 +217,8 @@ export async function deleteTrainingDay(id: number, mesocycleId: number) {
 // --- PrescribedExercise Actions ---
 
 export async function createPrescribedExercise(trainingDayId: number, mesocycleId: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     exerciseId: formData.get("exerciseId"),
     order: formData.get("order") || 1,
@@ -195,6 +241,7 @@ export async function createPrescribedExercise(trainingDayId: number, mesocycleI
   }
 
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.insert(prescribedExercises).values({
       trainingDayId,
       exerciseId: parsed.data.exerciseId,
@@ -221,6 +268,8 @@ export async function createPrescribedExercise(trainingDayId: number, mesocycleI
 }
 
 export async function updatePrescribedExercise(id: number, trainingDayId: number, mesocycleId: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     exerciseId: formData.get("exerciseId"),
     order: formData.get("order") || 1,
@@ -243,6 +292,7 @@ export async function updatePrescribedExercise(id: number, trainingDayId: number
   }
 
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.update(prescribedExercises).set({
       exerciseId: parsed.data.exerciseId,
       order: parsed.data.order,
@@ -268,7 +318,10 @@ export async function updatePrescribedExercise(id: number, trainingDayId: number
 }
 
 export async function deletePrescribedExercise(id: number, mesocycleId: number) {
+  const user = await requireUser();
+
   try {
+    await assertMesocycleOwner(mesocycleId, user);
     await db.delete(prescribedExercises).where(eq(prescribedExercises.id, id));
   } catch (error) {
     console.error("Error deleting prescribed exercise:", error);

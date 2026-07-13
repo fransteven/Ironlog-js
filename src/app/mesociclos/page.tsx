@@ -1,17 +1,21 @@
 import { db } from "@/db";
 import { mesocycles } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { MesocycleCard } from "@/components/mesocycles/mesocycle-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Plus, Calendar } from "lucide-react";
 import Link from "next/link";
 import { deleteMesocycle } from "@/actions/mesocycles";
+import { requireUser } from "@/lib/auth-helpers";
 
 export const revalidate = 0;
 
 export default async function MesocyclesPage() {
+  const user = await requireUser();
+
   const mesocyclesList = await db.query.mesocycles.findMany({
+    where: user.role === "ADMIN" ? undefined : eq(mesocycles.userId, user.id),
     orderBy: [desc(mesocycles.isActive), desc(mesocycles.createdAt)],
     with: { trainingDays: true },
   });

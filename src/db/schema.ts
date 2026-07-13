@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, text, integer, numeric, boolean, date, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, integer, numeric, boolean, date, timestamp, serial, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // ─── Enums ───
@@ -33,7 +33,21 @@ export const recordTypeEnum = pgEnum("record_type", [
   "1RM", "E1RM", "REP_PR"
 ]);
 
+export const roleEnum = pgEnum("user_role", [
+  "ADMIN", "USER"
+]);
+
 // ─── Tablas ───
+
+// ─── User ───
+export const users = pgTable("users", {
+  id:           serial("id").primaryKey(),
+  name:         text("name"),
+  email:        text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role:         roleEnum("role").notNull().default("USER"),
+  createdAt:    timestamp("created_at").$defaultFn(() => new Date()),
+});
 
 // ─── Exercise ───
 export const exercises = pgTable("exercises", {
@@ -52,6 +66,7 @@ export const exercises = pgTable("exercises", {
 // ─── Mesocycle ───
 export const mesocycles = pgTable("mesocycles", {
   id:           serial("id").primaryKey(),
+  userId:       integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   name:         text("name").notNull(),
   phase:        phaseEnum("phase").notNull(),
   totalWeeks:   integer("total_weeks").notNull().default(4),
@@ -95,6 +110,7 @@ export const prescribedExercises = pgTable("prescribed_exercises", {
 // ─── WorkoutSession ───
 export const workoutSessions = pgTable("workout_sessions", {
   id:              serial("id").primaryKey(),
+  userId:          integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   date:            date("date").notNull().$defaultFn(() => new Date().toISOString().split("T")[0]),
   trainingDayId:   integer("training_day_id").references(() => trainingDays.id, { onDelete: "set null" }),
   title:           text("title").default(""),
@@ -131,6 +147,7 @@ export const setLogs = pgTable("set_logs", {
 // ─── PersonalRecord ───
 export const personalRecords = pgTable("personal_records", {
   id:           serial("id").primaryKey(),
+  userId:       integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   exerciseId:   integer("exercise_id").notNull().references(() => exercises.id, { onDelete: "cascade" }),
   recordType:   recordTypeEnum("record_type").notNull(),
   weightKg:     numeric("weight_kg", { precision: 6, scale: 1 }).notNull(),
@@ -145,14 +162,25 @@ export const personalRecords = pgTable("personal_records", {
 // ─── BodyweightEntry ───
 export const bodyweightEntries = pgTable("bodyweight_entries", {
   id:       serial("id").primaryKey(),
-  date:     date("date").notNull().unique(),
+  userId:   integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+  date:     date("date").notNull(),
   weightKg: numeric("weight_kg", { precision: 5, scale: 1 }).notNull(),
   notes:    text("notes").default(""),
-});
+}, (table) => [
+  unique("bodyweight_entries_user_date_unique").on(table.userId, table.date),
+]);
 
 // ─── Relaciones ───
 
-export const mesocycleRelations = relations(mesocycles, ({ many }) => ({
+export const userRelations = relations(users, ({ many }) => ({
+  mesocycles:       many(mesocycles),
+  workoutSessions:  many(workoutSessions),
+  personalRecords:  many(personalRecords),
+  bodyweightEntries: many(bodyweightEntries),
+}));
+
+export const mesocycleRelations = relations(mesocycles, ({ one, many }) => ({
+  user:         one(users, { fields: [mesocycles.userId], references: [users.id] }),
   trainingDays: many(trainingDays),
 }));
 
@@ -168,6 +196,7 @@ export const prescribedExerciseRelations = relations(prescribedExercises, ({ one
 }));
 
 export const workoutSessionRelations = relations(workoutSessions, ({ one, many }) => ({
+  user:         one(users, { fields: [workoutSessions.userId], references: [users.id] }),
   trainingDay:  one(trainingDays, { fields: [workoutSessions.trainingDayId], references: [trainingDays.id] }),
   exerciseLogs: many(exerciseLogs),
 }));
@@ -183,6 +212,11 @@ export const setLogRelations = relations(setLogs, ({ one }) => ({
 }));
 
 export const personalRecordRelations = relations(personalRecords, ({ one }) => ({
+  user:     one(users, { fields: [personalRecords.userId], references: [users.id] }),
   exercise: one(exercises, { fields: [personalRecords.exerciseId], references: [exercises.id] }),
   setLog:   one(setLogs, { fields: [personalRecords.setLogId], references: [setLogs.id] }),
+}));
+
+export const bodyweightEntryRelations = relations(bodyweightEntries, ({ one }) => ({
+  user: one(users, { fields: [bodyweightEntries.userId], references: [users.id] }),
 }));

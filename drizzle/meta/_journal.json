@@ -8,6 +8,13 @@
       "when": 1782723153073,
       "tag": "0000_normal_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783896634202,
+      "tag": "0001_volatile_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

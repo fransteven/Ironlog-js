@@ -3,11 +3,14 @@
 import { db } from "@/db";
 import { exercises } from "@/db/schema";
 import { exerciseSchema } from "@/lib/validators";
+import { requireAdmin } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 export async function createExercise(formData: FormData) {
+  await requireAdmin();
+
   const raw = {
     name: formData.get("name"),
     category: formData.get("category"),
@@ -37,6 +40,8 @@ export async function createExercise(formData: FormData) {
 }
 
 export async function updateExercise(id: number, formData: FormData) {
+  await requireAdmin();
+
   const raw = {
     name: formData.get("name"),
     category: formData.get("category"),
@@ -66,6 +71,8 @@ export async function updateExercise(id: number, formData: FormData) {
 }
 
 export async function deleteExercise(id: number) {
+  await requireAdmin();
+
   try {
     await db.delete(exercises).where(eq(exercises.id, id));
   } catch (error) {

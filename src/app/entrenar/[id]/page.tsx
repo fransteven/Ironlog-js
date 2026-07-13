@@ -1,14 +1,9 @@
 import { db } from "@/db";
 import { workoutSessions, exerciseLogs, setLogs, exercises, prescribedExercises } from "@/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
-import { PageHeader } from "@/components/layout/page-header";
-import { SetLogger } from "@/components/workouts/set-logger";
-import { SetTable } from "@/components/workouts/set-table";
-import { Button } from "@/components/ui/button";
-import { addSet } from "@/actions/workouts";
+import { LoggingPanel } from "@/components/workouts/logging-panel";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { CheckCircle2, ChevronLeft } from "lucide-react";
+import { requireUser } from "@/lib/auth-helpers";
 
 interface PageProps {
   params: Promise<{
@@ -44,6 +39,11 @@ export default async function WorkoutLoggingPage({ params }: PageProps) {
   });
 
   if (!session) {
+    notFound();
+  }
+
+  const user = await requireUser();
+  if (user.role !== "ADMIN" && session.userId !== user.id) {
     notFound();
   }
 
@@ -96,43 +96,15 @@ export default async function WorkoutLoggingPage({ params }: PageProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 border-b border-border pb-4 mb-4">
-        <div>
-          <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider block mb-1">
-            Registro Activo · {session.date}
-          </span>
-          <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
-            {session.title || "Sesión de Entrenamiento"}
-          </h1>
-        </div>
-        
-        <Button size="sm" render={<Link href={`/entrenar/${session.id}/finalizar`} className="flex items-center gap-1.5" />} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-          <CheckCircle2 className="h-4 w-4" />
-          <span>Finalizar Sesión</span>
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Logger panel (izquierda/arriba en móvil) */}
-        <div className="lg:col-span-1 space-y-4">
-          <SetLogger
-            sessionId={sessionId}
-            exercises={exerciseList}
-            lastSetsData={lastSetsMap}
-            action={addSet}
-          />
-        </div>
-
-        {/* Set Table (derecha/abajo en móvil) */}
-        <div className="lg:col-span-2 space-y-4">
-          <SetTable
-            sessionId={sessionId}
-            exerciseLogsList={session.exerciseLogs}
-            prescribedMap={prescribedMap}
-          />
-        </div>
-      </div>
-    </div>
+    <LoggingPanel
+      sessionId={sessionId}
+      sessionDate={session.date}
+      sessionTitle={session.title || ""}
+      exercises={exerciseList}
+      lastSetsData={lastSetsMap}
+      exerciseLogsList={session.exerciseLogs}
+      prescribedMap={prescribedMap}
+      finalizarHref={`/entrenar/${session.id}/finalizar`}
+    />
   );
 }

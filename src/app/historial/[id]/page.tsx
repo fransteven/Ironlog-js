@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { requireUser } from "@/lib/auth-helpers";
 
 interface PageProps {
   params: Promise<{
@@ -41,6 +42,11 @@ export default async function SessionSummaryDetailPage({ params }: PageProps) {
   });
 
   if (!session) {
+    notFound();
+  }
+
+  const user = await requireUser();
+  if (user.role !== "ADMIN" && session.userId !== user.id) {
     notFound();
   }
 

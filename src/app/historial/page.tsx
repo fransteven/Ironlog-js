@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { workoutSessions } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -10,12 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, Smile, Trash2, Eye, Dumbbell, Play } from "lucide-react";
 import Link from "next/link";
+import { requireUser } from "@/lib/auth-helpers";
 
 export const revalidate = 0;
 
 export default async function HistoryPage() {
-  // Consultar todas las sesiones completadas o en curso
+  const user = await requireUser();
+
+  // Consultar sesiones completadas o en curso (ADMIN ve todas; USER solo las propias)
   const sessions = await db.query.workoutSessions.findMany({
+    where: user.role === "ADMIN" ? undefined : eq(workoutSessions.userId, user.id),
     orderBy: [desc(workoutSessions.date), desc(workoutSessions.createdAt)],
     with: {
       exerciseLogs: {

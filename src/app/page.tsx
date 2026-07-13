@@ -9,12 +9,18 @@ import { Calendar, Flame, Award, Plus, ArrowRight, Play, TrendingUp, Clock, Chev
 import Link from "next/link";
 import { currentWeek } from "@/lib/calculations";
 import { PHASE_COLORS } from "@/lib/constants";
+import { requireUser } from "@/lib/auth-helpers";
 
 export const revalidate = 0;
 
 export default async function DashboardPage() {
+  const user = await requireUser();
+  const isAdmin = user.role === "ADMIN";
+
   const activeMeso = await db.query.mesocycles.findFirst({
-    where: eq(mesocycles.isActive, true),
+    where: isAdmin
+      ? eq(mesocycles.isActive, true)
+      : and(eq(mesocycles.isActive, true), eq(mesocycles.userId, user.id)),
     with: {
       trainingDays: {
         with: { prescribedExercises: true },
@@ -24,6 +30,7 @@ export default async function DashboardPage() {
 
   const recentSessions = await db.query.workoutSessions.findMany({
     limit: 5,
+    where: isAdmin ? undefined : eq(workoutSessions.userId, user.id),
     orderBy: [desc(workoutSessions.date), desc(workoutSessions.createdAt)],
     with: {
       exerciseLogs: { with: { exercise: true, sets: true } },
@@ -33,6 +40,7 @@ export default async function DashboardPage() {
 
   const recentPRs = await db.query.personalRecords.findMany({
     limit: 5,
+    where: isAdmin ? undefined : eq(personalRecords.userId, user.id),
     orderBy: [desc(personalRecords.date), desc(personalRecords.createdAt)],
     with: { exercise: true },
   });
@@ -40,7 +48,9 @@ export default async function DashboardPage() {
   const weekAgoStr = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
   const weekSessions = await db.query.workoutSessions.findMany({
-    where: gte(workoutSessions.date, weekAgoStr),
+    where: isAdmin
+      ? gte(workoutSessions.date, weekAgoStr)
+      : and(gte(workoutSessions.date, weekAgoStr), eq(workoutSessions.userId, user.id)),
   });
 
   const weekSets = await db
@@ -48,7 +58,11 @@ export default async function DashboardPage() {
     .from(setLogs)
     .innerJoin(exerciseLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
     .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
-    .where(and(gte(workoutSessions.date, weekAgoStr), eq(setLogs.isWarmup, false)));
+    .where(
+      isAdmin
+        ? and(gte(workoutSessions.date, weekAgoStr), eq(setLogs.isWarmup, false))
+        : and(gte(workoutSessions.date, weekAgoStr), eq(setLogs.isWarmup, false), eq(workoutSessions.userId, user.id))
+    );
 
   const weekVolume = weekSets.reduce(
     (sum, set) => sum + Number(set.weightKg) * set.repsCompleted,

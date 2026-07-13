@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { FinishForm } from "@/components/workouts/finish-form";
 import { finishWorkoutSession } from "@/actions/workouts";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth-helpers";
 
 interface PageProps {
   params: Promise<{
@@ -25,6 +26,11 @@ export default async function FinishWorkoutPage({ params }: PageProps) {
   });
 
   if (!session) {
+    notFound();
+  }
+
+  const user = await requireUser();
+  if (user.role !== "ADMIN" && session.userId !== user.id) {
     notFound();
   }
 

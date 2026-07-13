@@ -5,8 +5,13 @@ import { usePathname } from "next/navigation";
 import { LayoutGrid, Calendar, Play, Clock, MoreHorizontal, Dumbbell, Award, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { UserMenu } from "@/components/layout/user-menu";
 
-export function Navbar() {
+interface NavbarProps {
+  user?: { email?: string | null; role?: "ADMIN" | "USER" } | null;
+}
+
+export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname();
 
   const desktopLinks = [
@@ -69,6 +74,7 @@ export function Navbar() {
             <Play className="h-4 w-4 fill-current" />
             <span>Entrenar</span>
           </Link>
+          {user && <UserMenu user={user} />}
         </div>
       </div>
 

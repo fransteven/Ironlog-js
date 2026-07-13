@@ -81,3 +81,8 @@ export const personalRecordSchema = z.object({
   date:       z.string().min(1),
   notes:      z.string().optional().default(""),
 });
+
+export const loginSchema = z.object({
+  email:    z.string().min(1, "Requerido").email("Email inválido"),
+  password: z.string().min(1, "Requerido"),
+});

@@ -4,12 +4,15 @@ import { db } from "@/db";
 import { personalRecords, bodyweightEntries } from "@/db/schema";
 import { personalRecordSchema } from "@/lib/validators";
 import { estimateE1RM } from "@/lib/calculations";
+import { requireUser, assertOwnership } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 export async function createPersonalRecord(formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     exerciseId: formData.get("exerciseId"),
     recordType: formData.get("recordType"),
@@ -35,6 +38,7 @@ export async function createPersonalRecord(formData: FormData) {
 
   try {
     await db.insert(personalRecords).values({
+      userId: user.id,
       exerciseId,
       recordType,
       weightKg: String(weightKg),
@@ -54,7 +58,13 @@ export async function createPersonalRecord(formData: FormData) {
 }
 
 export async function deletePersonalRecord(id: number) {
+  const user = await requireUser();
+
   try {
+    const [existing] = await db.select().from(personalRecords).where(eq(personalRecords.id, id));
+    if (!existing) return { error: "Récord no encontrado." };
+    assertOwnership(existing.userId, user);
+
     await db.delete(personalRecords).where(eq(personalRecords.id, id));
   } catch (error) {
     console.error("Error deleting personal record:", error);
@@ -74,6 +84,8 @@ const bodyweightFormSchema = z.object({
 });
 
 export async function upsertBodyweightEntry(formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     date: formData.get("date"),
     weightKg: formData.get("weightKg"),
@@ -90,12 +102,13 @@ export async function upsertBodyweightEntry(formData: FormData) {
   try {
     await db.insert(bodyweightEntries)
       .values({
+        userId: user.id,
         date,
         weightKg: String(weightKg),
         notes,
       })
       .onConflictDoUpdate({
-        target: bodyweightEntries.date,
+        target: [bodyweightEntries.userId, bodyweightEntries.date],
         set: {
           weightKg: String(weightKg),
           notes,
@@ -112,7 +125,13 @@ export async function upsertBodyweightEntry(formData: FormData) {
 }
 
 export async function deleteBodyweightEntry(id: number) {
+  const user = await requireUser();
+
   try {
+    const [existing] = await db.select().from(bodyweightEntries).where(eq(bodyweightEntries.id, id));
+    if (!existing) return { error: "Registro no encontrado." };
+    assertOwnership(existing.userId, user);
+
     await db.delete(bodyweightEntries).where(eq(bodyweightEntries.id, id));
   } catch (error) {
     console.error("Error deleting bodyweight entry:", error);

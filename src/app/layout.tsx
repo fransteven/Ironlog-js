@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { auth } from "@/auth";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -20,11 +21,13 @@ export const metadata: Metadata = {
   description: "Aplicación de registro y análisis de entrenamiento de fuerza basado en evidencia.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html
       lang="es"
@@ -33,7 +36,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          <Navbar />
+          <Navbar user={session?.user} />
           <main className="flex-1 container mx-auto px-4 py-8 pb-24 md:pb-8">
             {children}
           </main>

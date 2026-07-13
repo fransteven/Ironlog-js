@@ -4,11 +4,13 @@ import { db } from "@/db";
 import { workoutSessions, exerciseLogs, setLogs, personalRecords, exercises, trainingDays, prescribedExercises } from "@/db/schema";
 import { setLogSchema, finishSessionSchema, workoutSessionSchema } from "@/lib/validators";
 import { estimateE1RM } from "@/lib/calculations";
+import { requireUser, assertOwnership } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, desc, asc, sql } from "drizzle-orm";
 
 export async function startWorkoutSession(trainingDayId?: number | null) {
+  const user = await requireUser();
   let title = "Sesión Libre";
   let isDeload = false;
 
@@ -28,6 +30,7 @@ export async function startWorkoutSession(trainingDayId?: number | null) {
   let session;
   try {
     [session] = await db.insert(workoutSessions).values({
+      userId: user.id,
       date: new Date().toISOString().split("T")[0],
       trainingDayId: trainingDayId || null,
       title,
@@ -62,6 +65,8 @@ export async function startWorkoutSession(trainingDayId?: number | null) {
 }
 
 export async function addSet(sessionId: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     exerciseId: formData.get("exerciseId"),
     weightKg: formData.get("weightKg"),
@@ -77,6 +82,12 @@ export async function addSet(sessionId: number, formData: FormData) {
   }
 
   const { exerciseId, weightKg, repsCompleted, rpe, isWarmup, notes } = parsed.data;
+
+  const [ownerSession] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, sessionId));
+  if (!ownerSession) {
+    return { errors: { exerciseId: ["Sesión no encontrada."] } };
+  }
+  assertOwnership(ownerSession.userId, user);
 
   // 1. Obtener o crear el ExerciseLog para esta sesión y ejercicio
   let [exerciseLog] = await db.select().from(exerciseLogs)
@@ -108,32 +119,40 @@ export async function addSet(sessionId: number, formData: FormData) {
   }).returning();
 
   // 4. Detección automática de PR (Personal Record)
+  // Nota: la serie ya quedó insertada arriba. Este bloque no debe hacer fallar
+  // addSet completo si algo aquí revienta (neon-http no soporta rollback),
+  // así que se aísla en su propio try/catch.
   let isPR = false;
-  if (!isWarmup && repsCompleted > 0) {
-    const e1rm = estimateE1RM(weightKg, repsCompleted, rpe || undefined);
-    if (e1rm) {
-      // Buscar el mejor PR estimado de 1RM existente para este ejercicio
-      const [bestPR] = await db.select().from(personalRecords)
-        .where(eq(personalRecords.exerciseId, exerciseId))
-        .orderBy(desc(personalRecords.estimated1rm)).limit(1);
+  try {
+    if (!isWarmup && repsCompleted > 0) {
+      const e1rm = estimateE1RM(weightKg, repsCompleted, rpe || undefined);
+      if (e1rm) {
+        // Buscar el mejor PR estimado de 1RM existente de ESTE usuario para este ejercicio
+        const [bestPR] = await db.select().from(personalRecords)
+          .where(and(eq(personalRecords.exerciseId, exerciseId), eq(personalRecords.userId, user.id)))
+          .orderBy(desc(personalRecords.estimated1rm)).limit(1);
 
-      if (!bestPR || e1rm > Number(bestPR.estimated1rm)) {
-        const [session] = await db.select().from(workoutSessions)
-          .where(eq(workoutSessions.id, sessionId));
-        
-        await db.insert(personalRecords).values({
-          exerciseId,
-          recordType: "E1RM",
-          weightKg: String(weightKg),
-          reps: repsCompleted,
-          estimated1rm: String(e1rm),
-          date: session.date,
-          setLogId: newSet.id,
-          notes: "PR detectado automáticamente",
-        });
-        isPR = true;
+        if (!bestPR || e1rm > Number(bestPR.estimated1rm)) {
+          const [session] = await db.select().from(workoutSessions)
+            .where(eq(workoutSessions.id, sessionId));
+
+          await db.insert(personalRecords).values({
+            userId: user.id,
+            exerciseId,
+            recordType: "E1RM",
+            weightKg: String(weightKg),
+            reps: repsCompleted,
+            estimated1rm: String(e1rm),
+            date: session.date,
+            setLogId: newSet.id,
+            notes: "PR detectado automáticamente",
+          });
+          isPR = true;
+        }
       }
     }
+  } catch (error) {
+    console.error("Error detecting PR (set already saved):", error);
   }
 
   revalidatePath(`/entrenar/${sessionId}`);
@@ -141,7 +160,13 @@ export async function addSet(sessionId: number, formData: FormData) {
 }
 
 export async function deleteSet(setId: number, sessionId: number) {
+  const user = await requireUser();
+
   try {
+    const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, sessionId));
+    if (!session) return { error: "Sesión no encontrada" };
+    assertOwnership(session.userId, user);
+
     // 1. Buscar la serie para saber a qué log pertenece y qué número de serie es
     const [setToDelete] = await db.select().from(setLogs).where(eq(setLogs.id, setId));
     if (!setToDelete) return { error: "Serie no encontrada" };
@@ -170,6 +195,8 @@ export async function deleteSet(setId: number, sessionId: number) {
 }
 
 export async function finishWorkoutSession(id: number, formData: FormData) {
+  const user = await requireUser();
+
   const raw = {
     durationMinutes: formData.get("durationMinutes"),
     perceivedEnergy: formData.get("perceivedEnergy"),
@@ -182,11 +209,27 @@ export async function finishWorkoutSession(id: number, formData: FormData) {
   }
 
   try {
+    const [existing] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, id));
+    if (!existing) return { errors: { notes: ["Sesión no encontrada."] } };
+    assertOwnership(existing.userId, user);
+
     await db.update(workoutSessions).set({
       durationMinutes: parsed.data.durationMinutes,
       perceivedEnergy: parsed.data.perceivedEnergy,
       notes: parsed.data.notes,
     }).where(eq(workoutSessions.id, id));
+
+    // Limpiar exerciseLogs vacíos (p.ej. pre-creados desde un día prescrito
+    // pero nunca registrados) para que /historial no muestre ejercicios
+    // "fantasma" sin series.
+    const logs = await db.select().from(exerciseLogs).where(eq(exerciseLogs.sessionId, id));
+    for (const log of logs) {
+      const [{ count }] = await db.select({ count: sql<number>`count(*)` })
+        .from(setLogs).where(eq(setLogs.exerciseLogId, log.id));
+      if (Number(count) === 0) {
+        await db.delete(exerciseLogs).where(eq(exerciseLogs.id, log.id));
+      }
+    }
   } catch (error) {
     console.error("Error finishing workout session:", error);
     return { errors: { notes: ["Error al finalizar la sesión."] } };
@@ -199,7 +242,13 @@ export async function finishWorkoutSession(id: number, formData: FormData) {
 }
 
 export async function deleteWorkoutSession(id: number) {
+  const user = await requireUser();
+
   try {
+    const [existing] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, id));
+    if (!existing) return { error: "Sesión no encontrada." };
+    assertOwnership(existing.userId, user);
+
     // Buscar exerciseLogs de la sesión para borrar PRs asociados
     const logs = await db.select().from(exerciseLogs).where(eq(exerciseLogs.sessionId, id));
     for (const log of logs) {

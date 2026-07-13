@@ -30,7 +30,8 @@ ORM:            Drizzle ORM + drizzle-kit
 Validación:     Zod (schemas) + React Hook Form (client)
 UI:             shadcn/ui + TailwindCSS + Lucide Icons
 Charts:         Recharts
-Auth:           ninguna (v1 es single-user local)
+Auth:           NextAuth (Auth.js v5) · Credentials · JWT · bcryptjs · roles ADMIN/USER
+Testing:        Vitest (unit + integración contra Neon real)
 ```
 
 ### Dependencias exactas
@@ -49,6 +50,13 @@ pnpm add zod react-hook-form @hookform/resolvers
 # Charts
 pnpm add recharts
 
+# Auth
+pnpm add next-auth@beta bcryptjs
+pnpm add -D @types/bcryptjs
+
+# Testing
+pnpm add -D vitest vite-tsconfig-paths tsx dotenv-cli
+
 # UI (shadcn init + componentes)
 pnpm dlx shadcn@latest init
 pnpm dlx shadcn@latest add button card input label select textarea badge
@@ -57,7 +65,7 @@ pnpm dlx shadcn@latest add dropdown-menu sheet toast form
 pnpm dlx shadcn@latest add progress checkbox command popover
 ```
 
-**No instalar:** ORMs alternativos, Prisma, tRPC, NextAuth, Redux, Zustand, Chart.js. Solo lo de arriba.
+**No instalar:** ORMs alternativos, Prisma, tRPC, Redux, Zustand, Chart.js. Solo lo de arriba (NextAuth/Auth.js v5 es la única solución de auth permitida).
 
 ---
 
@@ -221,7 +229,7 @@ export const db = drizzle(sql, { schema });
 
 ### Enums — `src/db/schema.ts`
 ```typescript
-import { pgTable, pgEnum, text, integer, numeric, boolean, date, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, integer, numeric, boolean, date, timestamp, serial, unique } from "drizzle-orm/pg-core";
 
 export const exerciseCategoryEnum = pgEnum("exercise_category", [
   "PRIMARY", "SECONDARY", "ACCESSORY", "STABILIZER"
@@ -253,12 +261,26 @@ export const purposeEnum = pgEnum("exercise_purpose", [
 export const recordTypeEnum = pgEnum("record_type", [
   "1RM", "E1RM", "REP_PR"
 ]);
+
+export const roleEnum = pgEnum("user_role", [
+  "ADMIN", "USER"
+]);
 ```
 
 ### Tablas
 
 ```typescript
-// ─── Exercise ───
+// ─── User ───
+export const users = pgTable("users", {
+  id:           serial("id").primaryKey(),
+  name:         text("name"),
+  email:        text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role:         roleEnum("role").notNull().default("USER"),
+  createdAt:    timestamp("created_at").$defaultFn(() => new Date()),
+});
+
+// ─── Exercise ─── (catálogo global, compartido entre usuarios; CRUD solo ADMIN)
 export const exercises = pgTable("exercises", {
   id:              serial("id").primaryKey(),
   name:            text("name").notNull(),
@@ -275,6 +297,7 @@ export const exercises = pgTable("exercises", {
 // ─── Mesocycle ───
 export const mesocycles = pgTable("mesocycles", {
   id:           serial("id").primaryKey(),
+  userId:       integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   name:         text("name").notNull(),
   phase:        phaseEnum("phase").notNull(),
   totalWeeks:   integer("total_weeks").notNull().default(4),
@@ -318,6 +341,7 @@ export const prescribedExercises = pgTable("prescribed_exercises", {
 // ─── WorkoutSession ───
 export const workoutSessions = pgTable("workout_sessions", {
   id:              serial("id").primaryKey(),
+  userId:          integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   date:            date("date").notNull().$defaultFn(() => new Date().toISOString().split("T")[0]),
   trainingDayId:   integer("training_day_id").references(() => trainingDays.id, { onDelete: "set null" }),
   title:           text("title").default(""),
@@ -354,6 +378,7 @@ export const setLogs = pgTable("set_logs", {
 // ─── PersonalRecord ───
 export const personalRecords = pgTable("personal_records", {
   id:           serial("id").primaryKey(),
+  userId:       integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   exerciseId:   integer("exercise_id").notNull().references(() => exercises.id, { onDelete: "cascade" }),
   recordType:   recordTypeEnum("record_type").notNull(),
   weightKg:     numeric("weight_kg", { precision: 6, scale: 1 }).notNull(),
@@ -368,17 +393,28 @@ export const personalRecords = pgTable("personal_records", {
 // ─── BodyweightEntry ───
 export const bodyweightEntries = pgTable("bodyweight_entries", {
   id:       serial("id").primaryKey(),
-  date:     date("date").notNull().unique(),
+  userId:   integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+  date:     date("date").notNull(),
   weightKg: numeric("weight_kg", { precision: 5, scale: 1 }).notNull(),
   notes:    text("notes").default(""),
-});
+}, (table) => [
+  unique("bodyweight_entries_user_date_unique").on(table.userId, table.date),
+]);
 ```
 
 ### Relaciones
 ```typescript
 import { relations } from "drizzle-orm";
 
-export const mesocycleRelations = relations(mesocycles, ({ many }) => ({
+export const userRelations = relations(users, ({ many }) => ({
+  mesocycles:        many(mesocycles),
+  workoutSessions:   many(workoutSessions),
+  personalRecords:   many(personalRecords),
+  bodyweightEntries: many(bodyweightEntries),
+}));
+
+export const mesocycleRelations = relations(mesocycles, ({ one, many }) => ({
+  user:         one(users, { fields: [mesocycles.userId], references: [users.id] }),
   trainingDays: many(trainingDays),
 }));
 
@@ -394,6 +430,7 @@ export const prescribedExerciseRelations = relations(prescribedExercises, ({ one
 }));
 
 export const workoutSessionRelations = relations(workoutSessions, ({ one, many }) => ({
+  user:         one(users, { fields: [workoutSessions.userId], references: [users.id] }),
   trainingDay:  one(trainingDays, { fields: [workoutSessions.trainingDayId], references: [trainingDays.id] }),
   exerciseLogs: many(exerciseLogs),
 }));
@@ -409,10 +446,56 @@ export const setLogRelations = relations(setLogs, ({ one }) => ({
 }));
 
 export const personalRecordRelations = relations(personalRecords, ({ one }) => ({
+  user:     one(users, { fields: [personalRecords.userId], references: [users.id] }),
   exercise: one(exercises, { fields: [personalRecords.exerciseId], references: [exercises.id] }),
   setLog:   one(setLogs, { fields: [personalRecords.setLogId], references: [setLogs.id] }),
 }));
+
+export const bodyweightEntryRelations = relations(bodyweightEntries, ({ one }) => ({
+  user: one(users, { fields: [bodyweightEntries.userId], references: [users.id] }),
+}));
 ```
+
+---
+
+## 6.1 Arquitectura de Autenticación
+
+```
+src/auth.config.ts   ← config edge-safe (sin bcrypt/db): pages, session strategy,
+                        callbacks.authorized (usado por middleware), jwt/session callbacks
+src/auth.ts           ← NextAuth(authConfig) + provider Credentials (bcrypt.compare contra
+                        users.passwordHash). Exporta { handlers, auth, signIn, signOut }
+src/middleware.ts      ← NextAuth(authConfig).auth envuelto como middleware; matcher
+                        protege todo excepto /login, /api/auth/*, estáticos
+src/app/api/auth/[...nextauth]/route.ts  ← export const { GET, POST } = handlers
+src/lib/auth-helpers.ts                  ← requireUser() / requireAdmin() / assertOwnership()
+```
+
+**Roles:** `ADMIN` ve y edita todos los datos de todos los usuarios. `USER` solo ve/edita
+lo propio (filtrado por `userId` en cada query de lectura y cada server action de
+mutación). El catálogo de `exercises` es global y compartido; su CRUD queda restringido
+a `ADMIN` vía `requireAdmin()`.
+
+**Patrón en server actions de mutación:**
+```typescript
+export async function algunaAction(...) {
+  const user = await requireUser();           // lanza si no hay sesión
+  // ... insertar con userId: user.id, o:
+  assertOwnership(recurso.userId, user);       // ADMIN pasa siempre; USER solo lo propio
+}
+```
+
+**Patrón en lecturas (server components):**
+```typescript
+const user = await requireUser();
+const rows = await db.query.workoutSessions.findMany({
+  where: user.role === "ADMIN" ? undefined : eq(workoutSessions.userId, user.id),
+  ...
+});
+```
+
+**Seed del admin:** `src/db/seed-user.ts` (idempotente, upsert por email). Ejecutar con
+`npm run seed:user`.
 
 ---
 
@@ -501,6 +584,11 @@ export const personalRecordSchema = z.object({
   reps:       z.coerce.number().int().min(1).default(1),
   date:       z.string().min(1),
   notes:      z.string().optional().default(""),
+});
+
+export const loginSchema = z.object({
+  email:    z.string().min(1, "Requerido").email("Email inválido"),
+  password: z.string().min(1, "Requerido"),
 });
 ```
 
@@ -968,4 +1056,10 @@ const weekSessions = await db.query.workoutSessions.findMany({
 [ ] Responsive 375px
 [ ] Zod: errores visibles por campo
 [ ] revalidatePath en cada mutación
+[ ] npm run test → unit + integración en verde
+[ ] Acceso sin sesión a cualquier ruta (salvo /login) → redirect a /login
+[ ] Login con credenciales del admin seed → entra al dashboard
+[ ] USER solo ve/edita sus propios mesociclos, sesiones, PRs y peso corporal
+[ ] ADMIN ve y edita datos de todos los usuarios
+[ ] CRUD de /ejercicios restringido a ADMIN
 ```

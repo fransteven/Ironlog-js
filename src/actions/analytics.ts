@@ -4,9 +4,12 @@ import { db } from "@/db";
 import { workoutSessions, exerciseLogs, setLogs, exercises, personalRecords } from "@/db/schema";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { estimateE1RM } from "@/lib/calculations";
+import { requireUser } from "@/lib/auth-helpers";
 
 export async function getE1rmTrend(exerciseId: number) {
   try {
+    const user = await requireUser();
+
     // Obtener todas las series del ejercicio que no sean de calentamiento, junto con la fecha de la sesión
     const result = await db.select({
       date: workoutSessions.date,
@@ -18,10 +21,9 @@ export async function getE1rmTrend(exerciseId: number) {
     .innerJoin(exerciseLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
     .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
     .where(
-      and(
-        eq(exerciseLogs.exerciseId, exerciseId),
-        eq(setLogs.isWarmup, false)
-      )
+      user.role === "ADMIN"
+        ? and(eq(exerciseLogs.exerciseId, exerciseId), eq(setLogs.isWarmup, false))
+        : and(eq(exerciseLogs.exerciseId, exerciseId), eq(setLogs.isWarmup, false), eq(workoutSessions.userId, user.id))
     )
     .orderBy(workoutSessions.date);
 
@@ -48,6 +50,8 @@ export async function getE1rmTrend(exerciseId: number) {
 
 export async function getRpeTrend(exerciseId: number) {
   try {
+    const user = await requireUser();
+
     const result = await db.select({
       date: workoutSessions.date,
       rpe: setLogs.rpe,
@@ -56,11 +60,14 @@ export async function getRpeTrend(exerciseId: number) {
     .innerJoin(exerciseLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
     .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
     .where(
-      and(
-        eq(exerciseLogs.exerciseId, exerciseId),
-        eq(setLogs.isWarmup, false),
-        sql`${setLogs.rpe} IS NOT NULL`
-      )
+      user.role === "ADMIN"
+        ? and(eq(exerciseLogs.exerciseId, exerciseId), eq(setLogs.isWarmup, false), sql`${setLogs.rpe} IS NOT NULL`)
+        : and(
+            eq(exerciseLogs.exerciseId, exerciseId),
+            eq(setLogs.isWarmup, false),
+            sql`${setLogs.rpe} IS NOT NULL`,
+            eq(workoutSessions.userId, user.id)
+          )
     )
     .orderBy(workoutSessions.date);
 
@@ -87,6 +94,8 @@ export async function getRpeTrend(exerciseId: number) {
 
 export async function getVolumeTrend(weeks: number = 8) {
   try {
+    const user = await requireUser();
+
     const dateLimit = new Date();
     dateLimit.setDate(dateLimit.getDate() - weeks * 7);
     const dateLimitStr = dateLimit.toISOString().split("T")[0];
@@ -104,10 +113,9 @@ export async function getVolumeTrend(weeks: number = 8) {
     .innerJoin(exerciseLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
     .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
     .where(
-      and(
-        gte(workoutSessions.date, dateLimitStr),
-        eq(setLogs.isWarmup, false)
-      )
+      user.role === "ADMIN"
+        ? and(gte(workoutSessions.date, dateLimitStr), eq(setLogs.isWarmup, false))
+        : and(gte(workoutSessions.date, dateLimitStr), eq(setLogs.isWarmup, false), eq(workoutSessions.userId, user.id))
     )
     .orderBy(workoutSessions.date);
 
@@ -140,6 +148,8 @@ export async function getVolumeTrend(weeks: number = 8) {
 
 export async function getMuscleGroupDistribution() {
   try {
+    const user = await requireUser();
+
     const result = await db.select({
       primaryMuscle: exercises.primaryMuscle,
       weightKg: setLogs.weightKg,
@@ -148,7 +158,12 @@ export async function getMuscleGroupDistribution() {
     .from(setLogs)
     .innerJoin(exerciseLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
     .innerJoin(exercises, eq(exerciseLogs.exerciseId, exercises.id))
-    .where(eq(setLogs.isWarmup, false));
+    .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
+    .where(
+      user.role === "ADMIN"
+        ? eq(setLogs.isWarmup, false)
+        : and(eq(setLogs.isWarmup, false), eq(workoutSessions.userId, user.id))
+    );
 
     const muscleSetsMap: Record<string, number> = {};
     for (const row of result) {
