@@ -88,11 +88,11 @@ export function SetTable({ sessionId, exerciseLogsList, prescribedMap = {} }: Se
 
               {/* Objetivos Prescritos */}
               {pres && (
-                <div className="text-xs bg-primary/5 border border-primary/15 text-primary-foreground px-3 py-1.5 rounded text-primary">
-                  Objetivo: <strong className="font-bold">{pres.sets} series</strong> × <strong className="font-bold">{pres.repsMin}-{pres.repsMax} reps</strong> @ <strong className="font-bold">{pres.rpeTarget} RPE</strong>
+                <div className="text-xs bg-primary/10 border border-primary/30 text-foreground px-3 py-1.5 rounded">
+                  <span className="text-muted-foreground font-semibold">Objetivo:</span> <strong className="font-bold text-primary">{pres.sets} series</strong> × <strong className="font-bold text-primary">{pres.repsMin}-{pres.repsMax} reps</strong> @ <strong className="font-bold text-primary">{pres.rpeTarget} RPE</strong>
                   {workingSets > 0 && (
-                    <span className="ml-2 pl-2 border-l border-primary/20">
-                      Progreso: <strong className="font-bold">{workingSets}/{pres.sets}</strong>
+                    <span className="ml-2 pl-2 border-l border-primary/30">
+                      Progreso: <strong className="font-bold text-primary">{workingSets}/{pres.sets}</strong>
                     </span>
                   )}
                 </div>

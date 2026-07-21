@@ -103,8 +103,8 @@ export function TrainingDayForm({ defaultValues, action }: TrainingDayFormProps)
           />
         </div>
 
-        <Button type="submit" disabled={isPending} className="mt-4">
-          {isPending ? "Guardando..." : "Guardar Día"}
+        <Button type="submit" loading={isPending} className="mt-4">
+          Guardar Día
         </Button>
       </form>
     </Form>

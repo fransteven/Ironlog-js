@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ExerciseCombobox } from "@/components/shared/exercise-combobox";
 import { toast } from "sonner";
 import { estimateE1RM } from "@/lib/calculations";
 import { Dumbbell, Award, Plus, RefreshCw } from "lucide-react";
@@ -142,23 +142,11 @@ export function SetLogger({ sessionId, exercises, lastSetsData = {}, action, onS
           name="exerciseId"
           render={({ field }) => (
             <FormItem>
-              <Select
-                onValueChange={(val) => field.onChange(Number(val))}
-                value={field.value ? String(field.value) : undefined}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full bg-background font-semibold">
-                    <SelectValue placeholder="Selecciona un ejercicio..." />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {sortedExercises.map((ex) => (
-                    <SelectItem key={ex.id} value={String(ex.id)}>
-                      {ex.name} ({ex.primaryMuscle})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ExerciseCombobox
+                exercises={sortedExercises}
+                value={field.value ? Number(field.value) : null}
+                onChange={(id) => field.onChange(id)}
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -263,8 +251,8 @@ export function SetLogger({ sessionId, exercises, lastSetsData = {}, action, onS
         </div>
 
         {/* Botón enviar */}
-        <Button type="submit" disabled={isPending || !watchExerciseId} className="w-full font-bold">
-          {isPending ? "Registrando..." : "Registrar Serie"}
+        <Button type="submit" loading={isPending} disabled={!watchExerciseId} className="w-full font-bold">
+          Registrar Serie
           <Plus className="h-4 w-4 ml-1.5" />
         </Button>
       </form>

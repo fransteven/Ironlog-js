@@ -156,8 +156,8 @@ export function SessionForm({ trainingDaysList, defaultValues, action }: Session
           )}
         />
 
-        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-          {isPending ? "Iniciando..." : "Iniciar Sesión de Entrenamiento"}
+        <Button type="submit" loading={isPending} className="w-full sm:w-auto">
+          Iniciar Sesión de Entrenamiento
         </Button>
       </form>
     </Form>

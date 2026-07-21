@@ -199,8 +199,8 @@ export function MesocycleForm({ defaultValues, action }: MesocycleFormProps) {
         />
 
         <div className="flex items-center gap-4">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? "Guardando..." : "Guardar Mesociclo"}
+          <Button type="submit" loading={isPending}>
+            Guardar Mesociclo
           </Button>
         </div>
       </form>

@@ -250,8 +250,8 @@ export function ExerciseForm({ defaultValues, action }: ExerciseFormProps) {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? "Guardando..." : "Guardar Ejercicio"}
+          <Button type="submit" loading={isPending}>
+            Guardar Ejercicio
           </Button>
         </div>
       </form>

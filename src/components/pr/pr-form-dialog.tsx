@@ -196,8 +196,8 @@ export function PRFormDialog({ exercises }: PRFormDialogProps) {
             />
 
             <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isPending} className="w-full">
-                {isPending ? "Guardando..." : "Guardar Récord"}
+              <Button type="submit" loading={isPending} className="w-full">
+                Guardar Récord
               </Button>
             </DialogFooter>
           </form>

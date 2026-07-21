@@ -127,8 +127,8 @@ export function FinishForm({ defaultValues, action }: FinishFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={isPending} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-          {isPending ? "Guardando..." : "Guardar y Finalizar Sesión"}
+        <Button type="submit" loading={isPending} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+          Guardar y Finalizar Sesión
         </Button>
       </form>
     </Form>

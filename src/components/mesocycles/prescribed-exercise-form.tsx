@@ -288,8 +288,8 @@ export function PrescribedExerciseForm({ exercises, defaultValues, action }: Pre
           )}
         />
 
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Guardando..." : "Prescribir Ejercicio"}
+        <Button type="submit" loading={isPending}>
+          Prescribir Ejercicio
         </Button>
       </form>
     </Form>

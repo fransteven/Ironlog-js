@@ -70,9 +70,9 @@ export function LoginForm() {
           )}
         />
 
-        <Button type="submit" disabled={isPending} className="w-full font-bold flex items-center gap-1.5">
-          <LogIn className="h-4 w-4" />
-          <span>{isPending ? "Ingresando..." : "Iniciar sesión"}</span>
+        <Button type="submit" loading={isPending} className="w-full font-bold flex items-center gap-1.5">
+          {!isPending && <LogIn className="h-4 w-4" />}
+          <span>Iniciar sesión</span>
         </Button>
       </form>
     </Form>
